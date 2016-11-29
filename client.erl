@@ -39,7 +39,7 @@ client(ServerPID, connect) ->
     % wait for reponse
     receive
         connectionAccepted ->
-            io:format("Connected to server~n")
+            io:format("Connected to server.~n")
     end,
     client(ServerPID).
 
@@ -57,9 +57,9 @@ client(ServerPID) ->
         showUpload ->
             case SharedFiles of
                 [] ->
-                    io:format("No files for upload~n");
+                    io:format("No files for upload.~n");
                 _Else ->
-                    io:format("File for upload~n"),
+                    io:format("File for upload:~n"),
                     [io:format("~s~n", [FileName]) || FileName <- SharedFiles]    
             end,
             spawn(client,interface,[self()]),

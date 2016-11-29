@@ -65,19 +65,24 @@ server(List) ->
         {sharing, PID, SharedFiles} ->
             % Update informations
             ListFiles = [{PID,Name,[1]} || Name <- SharedFiles],
-            ListMinusPID = [{P,Name,Parts} || {P,Name,Parts} <- List, P /= PID],
-            List2 = ListMinusPID++ListFiles,
-            server(List2);
+            case ListFiles of
+                [] ->
+                    server(List);
+                _Else ->
+                    ListMinusPID = [{P,Name,Parts} || {P,Name,Parts} <- List, P /= PID],
+                    List2 = ListMinusPID++ListFiles,
+                    server(List2)
+            end;
 
         % Messages from interface
         showFiles ->
-            SharedFiles = lists:usort([Name || {_,Name,_} <- List]),
+            SharedFiles = lists:usort([Name || {_,Name,_} <- List, Name /= nofiles]),
             case SharedFiles of
                 [] ->
-                    io:format("No available files~n");
+                    io:format("No available files.~n");
                 _Else ->
                     io:format("Available files:~n"),
-                    [io:format("~s~n",[F]) || F <- SharedFiles]
+                    [io:format("~s~n",[F]) ||{F,_,_} <- SharedFiles]
             end,
             spawn(server,interface,[self()]),
             server(List);
