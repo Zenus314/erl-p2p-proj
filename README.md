@@ -13,3 +13,12 @@ Prossimo passo:
 [La cartella potrebbe essere .../p2p/shared_files e il client deve ottenere i nomi dei file come stringhe.]
 - Il server deve avere a disposizione una struttura dati che permette di sapere quali file sono disponibili nella rete e da quali macchine (o meglio, processi).
 [Immagino una cosa tipo una lista di tuple (nome_file,[lista dei pid che condividono il file]).]
+
+29.11.2016
+- Il server sa quali file sono disponibili nella rete.
+
+Prossimo passo:
+- Il client deve sapere quali file sono disponibili nella rete e poter decidere quale scaricare.
+[Includere una tabella che mostra se il client possiede già il file o meno.]
+- Due client devono potersi inviare un file intero tra di loro.
+[Testare su un programma a parte.]
