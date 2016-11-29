@@ -45,8 +45,11 @@ client(ServerPID, connect) ->
 
 % Main program for client
 client(ServerPID) ->
-    % Check which files are avaible on the machine
+    % Check which files are available on the machine
     {ok, SharedFiles} = file:list_dir(shared_files),
+
+    % Send the information to the server
+    ServerPID ! {sharing, self(), SharedFiles},
 
     receive
 

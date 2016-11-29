@@ -12,7 +12,7 @@
 % SERVER
 % This program run on a specific computer to act as server of our p2p program.
 % The purpose of the server is to share informations between clients about
-% files avaiability and locations.
+% files availability and locations.
 % It creates and delete 3 kind of files:
 % - server_pid: a textg file containing the 
 % - list_of_files: a text containing a list of all the shared files at the moment,
@@ -44,10 +44,10 @@ start() ->
     server([]).
 
 % Core of the program
-% List: [(PID,[(Name,[Parts])])] where
+% List: [{PID,Name,[Parts]}] where
 % PID: PID of the process sharing N
 % Name: Name of the file avaible in the network
-% [Parts]: Parts of the file avaible from PID (nth is 1 if the PID can share the
+% [Parts]: Parts of the file available from PID (nth is 1 if the PID can share the
 %          nth part, for now is only one 1). 
 server(List) ->
     receive
@@ -55,21 +55,41 @@ server(List) ->
         % Messages from clients
         {open, PID} ->
             PID ! connectionAccepted,
-            List2 = List++[{PID,[]}],
+            List2 = List++[{PID,nofiles,[]}],
             server(List2);
 
         {close, PID} ->
-            List2 = [{P,Rest} || {P,Rest} <- List, P /= PID],
+            List2 = [{P,Name,Parts} || {P,Name,Parts} <- List, P /= PID],
+            server(List2);
+
+        {sharing, PID, SharedFiles} ->
+            % Update informations
+            ListFiles = [{PID,Name,[1]} || Name <- SharedFiles],
+            ListMinusPID = [{P,Name,Parts} || {P,Name,Parts} <- List, P /= PID],
+            List2 = ListMinusPID++ListFiles,
             server(List2);
 
         % Messages from interface
+        showFiles ->
+            SharedFiles = lists:usort([Name || {_,Name,_} <- List]),
+            case SharedFiles of
+                [] ->
+                    io:format("No available files~n");
+                _Else ->
+                    io:format("Available files:~n"),
+                    [io:format("~s~n",[F]) || F <- SharedFiles]
+            end,
+            spawn(server,interface,[self()]),
+            server(List);
+
         showProcesses ->
             case List of
             [] ->
                 io:format("No connected processes.~n");
             _Else ->
                 io:format("Connected processes:~n"),
-                [io:format("~p~n",[P]) || {P,_} <- List]
+                ListUnique = lists:usort([P || {P,_,_} <- List]),
+                [io:format("~p~n",[P]) || P <- ListUnique]
             end,
             spawn(server,interface,[self()]),
             server(List);
@@ -85,10 +105,12 @@ server(List) ->
 % PID: pid of the main process
 interface(PID) ->
     io:format("~nEnter command:~n"),
+    io:format("f: show available files~n"),
     io:format("p: show connected processes~n"),
     io:format("q: close server~n"),
     Input = io:fread("","~s"),
     case Input of
+        {ok,["f"]} -> PID ! showFiles;
         {ok,["p"]} -> PID ! showProcesses;
         {ok,["q"]} -> PID ! stop;
         _Else -> io:format("Unrecognized input~n",[]), interface(PID)
