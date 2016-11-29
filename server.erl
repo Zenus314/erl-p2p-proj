@@ -4,6 +4,7 @@
 %-------------------------------------
 % Concurrent and Distributed Computing
 % SA 2016 Project
+% Université de Fribourg
 %-------------------------------------
 % Peer-to-peer
 %=====================================
@@ -22,7 +23,7 @@
 %=====================================
 
 -module(server).
--export([start/0, server/1, interface/1]).
+-export([start/0, server/1, interface/1, printPID/1]).
 
 
 %-------------------------------------
@@ -34,7 +35,7 @@ start() ->
 
     % Send its own pid to evrery other pc on teda, so they can save it on a file.
     {ok, [_|Ns]} = file:consult('enodes.conf'),  %--- read nodes id from enodes.conf
-    [spawn(N, printer, printPID, [self()]) || N <- Ns],
+    [spawn(N, server, printPID, [self()]) || N <- Ns],
 
     % Start interface
     spawn(server,interface,[self()]),
@@ -43,36 +44,38 @@ start() ->
     server([]).
 
 % Core of the program
-% Ns: list of connected processes
-server(PIDs) ->
+% List: [(PID,[(Name,[Parts])])] where
+% PID: PID of the process sharing N
+% Name: Name of the file avaible in the network
+% [Parts]: Parts of the file avaible from PID (nth is 1 if the PID can share the
+%          nth part, for now is only one 1). 
+server(List) ->
     receive
 
         % Messages from clients
         {open, PID} ->
-            %io:format("Client connected, PID:~p~n",[PID]),
-            PIDs2 = PIDs++[PID],
-            server(PIDs2);
+            PID ! connectionAccepted,
+            List2 = List++[{PID,[]}],
+            server(List2);
 
         {close, PID} ->
-            %io:format("Client disconnected, PID:~p~n",[PID]),
-            PIDs2 = [N || N <- PIDs, N /= PID],
-            server(PIDs2);
+            List2 = [{P,Rest} || {P,Rest} <- List, P /= PID],
+            server(List2);
 
         % Messages from interface
         showProcesses ->
-            case PIDs of
+            case List of
             [] ->
                 io:format("No connected processes.~n");
             _Else ->
                 io:format("Connected processes:~n"),
-                [io:format("~p~n",[N]) || N <- PIDs]
+                [io:format("~p~n",[P]) || {P,_} <- List]
             end,
-            interface(self()),
-            server(PIDs);
+            spawn(server,interface,[self()]),
+            server(List);
 
         stop ->
-            io:format("Server closing~n"),
-            stop
+            io:format("Server closing~n")
     end.
 
 %-------------------------------------
@@ -84,9 +87,13 @@ interface(PID) ->
     io:format("~nEnter command:~n"),
     io:format("p: show connected processes~n"),
     io:format("q: close server~n"),
-    {ok,[C]} = io:fread("","~s"),
-    case C of
-        "p" -> PID ! showProcesses;
-        "q" -> PID ! stop;
+    Input = io:fread("","~s"),
+    case Input of
+        {ok,["p"]} -> PID ! showProcesses;
+        {ok,["q"]} -> PID ! stop;
         _Else -> io:format("Unrecognized input~n",[]), interface(PID)
     end.
+
+% Print PID of server on a file
+printPID(PID) ->
+    file:write_file("server_files/serverPID", io_lib:format("~p.", [erlang:term_to_binary(PID)])).
