@@ -74,6 +74,11 @@ server(List) ->
                     server(List2)
             end;
 
+        {showFilesRequest, PID} ->
+            SharedFiles = lists:usort([Name || {_,Name,_} <- List, Name /= nofiles]),
+            PID ! {showFilesAnswer, SharedFiles},
+            server(List);
+
         % Messages from interface
         showFiles ->
             SharedFiles = lists:usort([Name || {_,Name,_} <- List, Name /= nofiles]),
@@ -82,7 +87,7 @@ server(List) ->
                     io:format("No available files.~n");
                 _Else ->
                     io:format("Available files:~n"),
-                    [io:format("~s~n",[F]) ||{F,_,_} <- SharedFiles]
+                    [io:format("~s~n",[F]) || F <- SharedFiles]
             end,
             spawn(server,interface,[self()]),
             server(List);
