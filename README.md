@@ -22,3 +22,11 @@ Prossimo passo:
 [Includere una tabella che mostra se il client possiede già il file o meno.]
 - Due client devono potersi inviare un file intero tra di loro.
 [Testare su un programma a parte.]
+
+2.12.2016 (Mattina)
+- I client possono scaricare un file scrivendone il nome. I file condivisi sono contenuti nella cartella "~/mpe/erl/teda/p2p_shared_files".
+
+Prossimo passo:
+- Correggere il problema delle porte: un client può scaricare un solo file alla volta. 
+Probabile causa: la porta non viene chiusa correttamente al termine dello scambio, restando quindi inutilizzabile per un altro scambio.
+Possibili soluzioni: chiudere nel modo corretto la porta, oppure svolgere le operazioni con un processo a parte, che quando termina chiude automaticamente le porte (forse).
