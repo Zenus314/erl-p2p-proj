@@ -30,3 +30,9 @@ Prossimo passo:
 - Correggere il problema delle porte: un client può scaricare un solo file alla volta. 
 Probabile causa: la porta non viene chiusa correttamente al termine dello scambio, restando quindi inutilizzabile per un altro scambio.
 Possibili soluzioni: chiudere nel modo corretto la porta, oppure svolgere le operazioni con un processo a parte, che quando termina chiude automaticamente le porte (forse).
+
+2.12.2016 (Sempre mattina)
+- Sistemata la faccenda delle porte utilizzando un processo a parte.
+
+Prossimo passo:
+- Scaricare il file da più sorgenti alla volta.
