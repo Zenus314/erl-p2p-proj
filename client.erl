@@ -18,7 +18,7 @@
 %=====================================
 
 -module(client).
--export([start/0, client/2, interface/1,file_name_receiver/1, file_receiver_loop/3, save_file/2, send_file/4]).
+-export([start/0, client/2, interface/1,file_name_receiver/2, file_receiver_loop/4, save_file/2, send_file/4]).
 
 
 %-------------------------------------
@@ -61,7 +61,7 @@ client(ServerPID, MachineIP) ->
         % Messages from other clients
         {downloadRequest, Host, FileName, Port} ->
             FilePath = "../../p2p_shared_files/"++FileName,
-            send_file(Host,FileName,FilePath,Port),
+            spawn(client,send_file,[Host,FileName,FilePath,Port]),
             client(ServerPID, MachineIP);
 
         % Messages from interface
@@ -83,13 +83,14 @@ client(ServerPID, MachineIP) ->
                             Uploaders = [erlang:binary_to_term(P) || P <- BinUploaders],
                             % For now we simply take the first PID in the list
                             [OtherPID|_] = Uploaders,
-                            io:format("OtherPID is: ~p~n", [OtherPID]),
                             % Choose a free (at least it is my hope) port
                             Port = 5678,
                             % Send request to other client
                             OtherPID ! {downloadRequest, MachineIP, FileName, Port},
                             % Wait and download file
-                            file_name_receiver(Port)                        
+                            spawn(client,file_name_receiver,[Port,self()]),
+                            % Wait the end of download to restart client
+                            receive downloadFinished -> ok end
                     end
             end,
             spawn(client,interface,[self()]),
@@ -140,26 +141,27 @@ client(ServerPID, MachineIP) ->
 %-------------------------------------
 % Client want to receive file
 % Port: used port
-file_name_receiver(Port)->
+file_name_receiver(Port,PID)->
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}]),
     {ok, Socket} = gen_tcp:accept(LSock),
     {ok,FileNameBinaryPadding}=gen_tcp:recv(Socket,30),
     FileNamePadding=erlang:binary_to_list(FileNameBinaryPadding),
     FileName = string:strip(FileNamePadding,both,$ ),
-    file_receiver_loop(Socket,FileName,[]).
+    file_receiver_loop(Socket,FileName,[],PID).
 
 % Loop to get the whole file
 % Socket: sending sockets
 % FileName: name of the file
 % Bs: received binaries
-file_receiver_loop(Socket,FileName,Bs)->
+file_receiver_loop(Socket,FileName,Bs,PID)->
     io:format("~nReceiving file~n"),
     case gen_tcp:recv(Socket, 0) of
     {ok, B} ->
-        file_receiver_loop(Socket, FileName,[Bs, B]);
+        file_receiver_loop(Socket, FileName,[Bs, B],PID);
     {error, closed} ->
         save_file(FileName,Bs),
-        ok = gen_tcp:close(Socket)
+        ok = gen_tcp:close(Socket),
+        PID ! downloadFinished
     end.
 
 % Save the file in the right position (../../p2p_shared_files)
@@ -215,3 +217,4 @@ interface_download(PID) ->
         {ok, [FileName]} -> PID ! {downloadStart, FileName};
         _Else -> io:format("Unrecognized input~n",[]), interface_download(PID)
     end.
+
