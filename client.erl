@@ -82,15 +82,21 @@ client(ServerPID, MachineIP) ->
                             % First convert the binary form
                             Uploaders = [erlang:binary_to_term(P) || P <- BinUploaders],
                             % For now we simply take the first PID in the list
-                            [OtherPID|_] = Uploaders,
+                            %%%%%%%%%%%%%%%%%%%%%%%%%[OtherPID|_] = Uploaders,
                             % Choose a free (at least it is my hope) port
                             Port = 5678,
                             % Send request to other client
-                            OtherPID ! {downloadRequest, MachineIP, FileName, Port},
+                            %%%%%%%%%%%%%%%%%%%%%%%%%OtherPID ! {downloadRequest, MachineIP, FileName, Port},
+                            [P ! {downloadRequest, MachineIP, FileName, Port} || P <- Uploaders],
                             % Wait and download file
-                            spawn(client,file_name_receiver,[Port,self()]),
+                            StartTime = now(),
+                            [spawn(client,file_name_receiver,[Port,self()]) || _ <- Uploaders],
                             % Wait the end of download to restart client
-                            receive downloadFinished -> ok end
+                            receive downloadFinished -> 
+                                EndTime = now(),
+                                DownloadTime = timer:now_diff(EndTime,StartTime) / 1000000,
+                                io:format("Download Time: ~ps~n",[DownloadTime]) 
+                            end
                     end
             end,
             spawn(client,interface,[self()]),
@@ -135,26 +141,27 @@ client(ServerPID, MachineIP) ->
     end.
 
 
-
 %-------------------------------------
 % TCP file sharing
 %-------------------------------------
 % Client want to receive file
 % Port: used port
+% PID: PID of the client porcess, useful to tell when download ended
 file_name_receiver(Port,PID)->
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}]),
     {ok, Socket} = gen_tcp:accept(LSock),
     {ok,FileNameBinaryPadding}=gen_tcp:recv(Socket,30),
     FileNamePadding=erlang:binary_to_list(FileNameBinaryPadding),
     FileName = string:strip(FileNamePadding,both,$ ),
+    io:format("~nReceiving file~n"),
     file_receiver_loop(Socket,FileName,[],PID).
 
 % Loop to get the whole file
 % Socket: sending sockets
 % FileName: name of the file
 % Bs: received binaries
+% PID: PID of the client porcess, useful to tell when download ended
 file_receiver_loop(Socket,FileName,Bs,PID)->
-    io:format("~nReceiving file~n"),
     case gen_tcp:recv(Socket, 0) of
     {ok, B} ->
         file_receiver_loop(Socket, FileName,[Bs, B],PID);
@@ -195,7 +202,7 @@ send_file(Host,FileName,FilePath,Port)->
 interface(PID) ->
     io:format("~nEnter command~n"),
     io:format("d: go to download~n"),
-    io:format("a: show ip adress~n"),    
+    io:format("a: show ip address~n"),    
     io:format("f: show available files~n"),
     io:format("u: show upload files~n"),
     io:format("q: close program~n"),
