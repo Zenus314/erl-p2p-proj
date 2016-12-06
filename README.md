@@ -36,3 +36,10 @@ Possibili soluzioni: chiudere nel modo corretto la porta, oppure svolgere le ope
 
 Prossimo passo:
 - Scaricare il file da più sorgenti alla volta.
+
+6.12.2016
+- Perfettoh!
+
+Prossimo passo:
+- Completare script per la generazione dell'ambiente di test.
+- Commentare all'inverosimile.
