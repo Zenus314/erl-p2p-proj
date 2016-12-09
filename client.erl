@@ -12,7 +12,6 @@
 % CLIENT
 % 
 %
-%
 % Usage: client:start().
 %
 %=====================================
@@ -117,7 +116,8 @@ client(ServerPID, MachineIP) ->
                            
                             % Wait the end of the download of each piece
                             waitDownloadEnd(NbU),
-
+                            
+                            io:format("Merging file fragments...~n"),
                             os:cmd("cat tmp_"++FileName++DownloadID++"/* > ../../p2p_shared_files/"++FileName),
                             EndTime = now(),
                             DownloadTime = timer:now_diff(EndTime,StartTime) / 1000000,
