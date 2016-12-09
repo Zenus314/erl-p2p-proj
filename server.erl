@@ -46,55 +46,57 @@ start() ->
     server([]).
 
 % Core of the program
-% List: [{PID,Name,[Parts]}] where
+% List: [{PID,Name}] where
 % PID: PID of the process sharing N
 % Name: Name of the file avaible in the network
-% [Parts]: Parts of the file available from PID (nth is 1 if the PID can share the
-%          nth part, for now is only one 1). 
 server(List) ->
     receive
 
         % Messages from clients
         {open, PID} ->
             PID ! connectionAccepted,
-            List2 = List++[{PID,nofiles,[]}],
+            List2 = List++[{PID,nofiles}],
             server(List2);
 
         {close, PID} ->
-            List2 = [{P,Name,Parts} || {P,Name,Parts} <- List, P /= PID],
+            List2 = [{P,Name} || {P,Name} <- List, P /= PID],
             server(List2);
 
         {sharing, PID, SharedFiles} ->
             % Update informations
-            ListFiles = [{PID,Name,[1]} || Name <- SharedFiles],
+            ListFiles = [{PID,Name} || Name <- SharedFiles],
             case ListFiles of
                 [] ->
-                    server(List);
+                    ListMinusPID = [{P,Name} || {P,Name} <- List, P /= PID],
+                    List2 = ListMinusPID++[{PID,nofiles}];
                 _Else ->
-                    ListMinusPID = [{P,Name,Parts} || {P,Name,Parts} <- List, P /= PID],
-                    List2 = ListMinusPID++ListFiles,
-                    server(List2)
-            end;
+                    ListMinusPID = [{P,Name} || {P,Name} <- List, P /= PID],
+                    List2 = ListMinusPID++ListFiles
+            end,
+            server(List2);
 
         {showFilesRequest, PID} ->
-            SharedFiles = lists:usort([Name || {_,Name,_} <- List, Name /= nofiles]),
+            SharedFiles = lists:usort([Name || {_,Name} <- List, Name /= nofiles]),
             PID ! {showFilesAnswer, SharedFiles},
             server(List);
 
         {downloadServer, PID, FileName} ->
             % Translate to binary to send with !
-            Uploaders = [erlang:term_to_binary(P) || {P,Name,_} <- List, Name == FileName],
+            Uploaders = [erlang:term_to_binary(P) || {P,Name} <- List, Name == FileName],
             case Uploaders of
                 [] ->
-                    PID ! {downloadUploaders, nothing};
+                    PID ! {downloadUploaders, nothing},
+                    server(List);
                 _Else ->
-                    PID ! {downloadUploaders, Uploaders}
-            end,
-            server(List);
+                    PID ! {downloadUploaders, Uploaders},
+                    ListMinusPID = [{P,Name} || {P,Name} <- List, P /= PID],
+                    List2 = ListMinusPID++[{PID,nofiles}],
+                    server(List2)
+            end;
 
         % Messages from interface
         showFiles ->
-            SharedFiles = lists:usort([Name || {_,Name,_} <- List, Name /= nofiles]),
+            SharedFiles = lists:usort([Name || {_,Name} <- List, Name /= nofiles]),
             case SharedFiles of
                 [] ->
                     io:format("No available files.~n");
@@ -111,7 +113,7 @@ server(List) ->
                 io:format("No connected processes.~n");
             _Else ->
                 io:format("Connected processes:~n"),
-                ListUnique = lists:usort([P || {P,_,_} <- List]),
+                ListUnique = lists:usort([P || {P,_} <- List]),
                 [io:format("~p~n",[P]) || P <- ListUnique]
             end,
             spawn(server,interface,[self()]),
