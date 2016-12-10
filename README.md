@@ -1,45 +1,38 @@
 # erl-p2p-proj
 
-Usiamo questa repository solo per condividere i tre (per ora) file di codice.
+1. First step execute the script setupEnvironment.sh diufUsername
 
-Per usarli, occorre salvarli nell'ambiente teda, sotto la cartella seguente:
-~/mpe/erl/teda/apps/p2p/
+This script will prepare the environnement sending to all the machines files in order to try the p2p
 
-28.11.2016:
-- I client possono connettersi al server.
+This is the result of the script:
++---------+------------------------------------------------+
+|         |                   Files Name                   |
++ PC Name +------------------------------------------------+
+|         | lorem.txt | sam.mp4 | games.mp4 | isengard.mp4 |
++---------+-----------+---------+-----------+--------------+
+|   pc80  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc81  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc82  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc83  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc84  |    Yes    |   Yes   |     No    |      No      |
++---------+-----------+---------+-----------+--------------+
+|   pc85  |    Yes    |   Yes   |     No    |      No      |
++---------+-----------+---------+-----------+--------------+
+|   pc86  |     No    |    No   |     No    |      No      |
++---------+-----------+---------+-----------+--------------+
 
-Prossimo passo:
-- I client devono saper riconoscere quali file hanno a disposizione nella cartella apposita e inviare l'informazione al server.
-[La cartella potrebbe essere .../p2p/shared_files e il client deve ottenere i nomi dei file come stringhe.]
-- Il server deve avere a disposizione una struttura dati che permette di sapere quali file sono disponibili nella rete e da quali macchine (o meglio, processi).
-[Immagino una cosa tipo una lista di tuple (nome_file,[lista dei pid che condividono il file]).]
+2. Launch ./server.sh diufUsername
 
-29.11.2016
-- Il server sa quali file sono disponibili nella rete.
+This script will send to all pc the code and launch a server in the pc80
 
-Prossimo passo:
-- Il client deve sapere quali file sono disponibili nella rete e poter decidere quale scaricare.
-[Includere una tabella che mostra se il client possiede già il file o meno.]
-- Due client devono potersi inviare un file intero tra di loro.
-[Testare su un programma a parte.]
+3. In a new terminal launch ./client.sh diufUsername NumberOfThePC
 
-2.12.2016 (Mattina)
-- I client possono scaricare un file scrivendone il nome. I file condivisi sono contenuti nella cartella "~/mpe/erl/teda/p2p_shared_files".
+Every pc can be a client also the pc with the server.
+Just open for every client a new terminal.
+Then try to download something
 
-Prossimo passo:
-- Correggere il problema delle porte: un client può scaricare un solo file alla volta. 
-Probabile causa: la porta non viene chiusa correttamente al termine dello scambio, restando quindi inutilizzabile per un altro scambio.
-Possibili soluzioni: chiudere nel modo corretto la porta, oppure svolgere le operazioni con un processo a parte, che quando termina chiude automaticamente le porte (forse).
-
-2.12.2016 (Sempre mattina)
-- Sistemata la faccenda delle porte utilizzando un processo a parte.
-
-Prossimo passo:
-- Scaricare il file da più sorgenti alla volta.
-
-6.12.2016
-- Perfettoh!
-
-Prossimo passo:
-- Completare script per la generazione dell'ambiente di test.
-- Commentare all'inverosimile.
+4. Execute deleteShared.sh diufUsername to restore to the starting state the enironnement
