@@ -52,16 +52,22 @@ start() ->
 server(List) ->
     receive
 
+        %-------------------------------------
         % Messages from clients
+        %-------------------------------------
+        
+        % A new clients connecting, we save his PID in the list
         {open, PID} ->
             PID ! connectionAccepted,
             List2 = List++[{PID,nofiles}],
             server(List2);
 
+        % A new clients disconnect we remove his PID and his files name from the list
         {close, PID} ->
             List2 = [{P,Name} || {P,Name} <- List, P /= PID],
             server(List2);
 
+        % A client share a file (we put the name of the file with the sharing PID in the list)
         {sharing, PID, SharedFiles} ->
             % Update informations
             ListFiles = [{PID,Name} || Name <- SharedFiles],
@@ -74,14 +80,18 @@ server(List) ->
                     List2 = ListMinusPID++ListFiles
             end,
             server(List2);
-
+    
+        % A client request the list of available files
+        % Sort the list from the Name of the files and send it to the client
         {showFilesRequest, PID} ->
             SharedFiles = lists:usort([Name || {_,Name} <- List, Name /= nofiles]),
             PID ! {showFilesAnswer, SharedFiles},
             server(List);
 
+        % The client ask if there are uploader for a specific file
+        % If there are we send back the list of it 
         {downloadServer, PID, FileName} ->
-            % Translate to binary to send with !
+            % Translate to binary the PID to send with !
             Uploaders = [erlang:term_to_binary(P) || {P,Name} <- List, Name == FileName],
             case Uploaders of
                 [] ->
@@ -94,7 +104,12 @@ server(List) ->
                     server(List2)
             end;
 
+        %-------------------------------------
         % Messages from interface
+        %-------------------------------------
+
+        % Show the list of available files
+        % We read and sort from the Name of files the list and if there are disponibles files we print it
         showFiles ->
             SharedFiles = lists:usort([Name || {_,Name} <- List, Name /= nofiles]),
             case SharedFiles of
@@ -107,6 +122,8 @@ server(List) ->
             spawn(server,interface,[self()]),
             server(List);
 
+        
+        % Show all the clients(process) connected 
         showProcesses ->
             case List of
             [] ->
