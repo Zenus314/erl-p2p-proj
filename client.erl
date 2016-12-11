@@ -10,10 +10,13 @@
 %=====================================
 %
 % CLIENT
-% 
+% This program allows to share and download files with other machines in a set
+% of trusted nodes.
+% When a client is downloading a file, it is locked to that task and can't do
+% anything else.
 %
 % Usage: client:start().
-%
+% To use the clients, the server must be on.
 % Save the shared files in the folder: ../../p2p_shared_files/
 %
 %=====================================
@@ -25,6 +28,7 @@
 %-------------------------------------
 % Main program
 %-------------------------------------
+
 % Start the client
 start() ->
     io:format("Client on~n"),
@@ -42,7 +46,7 @@ start() ->
     % Connect client to server
     io:format("Connecting to server...~n"),
     ServerPID ! {open, self()},
-    % wait for reponse
+    % Wait for reponse
     receive
         connectionAccepted ->
             io:format("Connected to server.~n")
@@ -70,21 +74,23 @@ client(ServerPID, MachineIP) ->
         % Messages from other clients
         %-------------------------------------
 
-        % A client ask to download a file
-        % We create a temporary directory and we split the request file in N pieces
-        % In order distinguish every download we named the folder with the file name and the seconds of when the download start compute from the 1970
-        % N is given from the requesting client and is equivalent to the number of seeder of the file
+        % Another client ask to download a file
         % FileNumber: the number of the piece that this client must send
+        % NbU: the number of seeder of the file
         {downloadRequest, Host, FileName, Port, FileNumber, NbU, DownloadID} ->
+            % Create temporary directory
             os:cmd("mkdir -p tmp_"++FileName++DownloadID),
+            % Memorize path in variable
             FilePath = "tmp_"++FileName++DownloadID++"/",
-
+            % Split file in NbU pieces
             os:cmd("split -n "++io_lib:format("~p ",[NbU])++
                    "../../p2p_shared_files/"++FileName++" "++FilePath),
+            % Save the names of pieces in a list
             Files = os:cmd("ls "++FilePath),
             FilesList = string:tokens(Files,"\n"),
             % Find the name of the file that he must send
             FilePiece = lists:nth(FileNumber,FilesList),
+            % Spawn sendig process
             spawn(client,send_file,[Host,FilePiece,FilePath,Port]),
             client(ServerPID, MachineIP);
 
@@ -100,7 +106,7 @@ client(ServerPID, MachineIP) ->
         % Start the download
         {downloadStart, FileName} ->
             OwnFile = lists:member(FileName, SharedFiles),
-            % Check if it already has the file
+            % Check if the machine already has the file
             case OwnFile of
                 true ->
                     io:format("File ~p is already on this pc~n",[FileName]);
@@ -113,11 +119,12 @@ client(ServerPID, MachineIP) ->
                         
                          % We receive the list of Uploaders
                         {downloadUploaders, BinUploaders} -> 
-                            % First convert the binary form
+                            % First convert from the binary form
                             Uploaders = [erlang:binary_to_term(P) || P <- BinUploaders],
+                            % Number of uploaders
                             NbU = length(Uploaders),
                      
-                            % Choose a free port (we use a script for that)
+                            % Choose NbU free ports (we use a bash script for that)
                             String = os:cmd("./portsFinder.sh "++io_lib:format("~p",[NbU])),
                             StringPorts = string:tokens(String,"\n"),
                             Ports = [Q || {Q,_} <- [string:to_integer(P) || P <- StringPorts]],
@@ -142,10 +149,12 @@ client(ServerPID, MachineIP) ->
                             os:cmd("cat tmp_"++FileName++DownloadID++"/* > ../../p2p_shared_files/"++FileName),
                             % Timer stopped
                             EndTime = now(),
+                            % Calculate time difference and convert from ns to s
                             DownloadTime = timer:now_diff(EndTime,StartTime) / 1000000,
                             io:format("Download Time: ~ps~n",[DownloadTime]),
-                            % Delete temporary folder and we tell to the uploader that we have finished the download
+                            % Delete temporary folder
                             os:cmd("rm -r tmp_"++FileName++DownloadID),
+                            % Tell to uploaders that the download ended
                             [U ! {thanks,FileName, DownloadID} || U <- Uploaders]
                     end
             end,
@@ -202,13 +211,20 @@ client(ServerPID, MachineIP) ->
 % Download Functions
 %-------------------------------------
 
-% Send to the uploaders the right port and the right number of the pieces to sened
-% It's a loop that every time take the first free port and send all to the first uploader
-% Then he spawn a new process in order to receive that piece of file
+% Send to each Uploaders the request for downloading a specific part of file
+% Port: the next port used for transmission
+% Ports: remaining free ports
+% Uploader: next uploader
+% Uploaders: remaining uploaders
+% FileNumber: specific which part of the file the Uploader has to send
+% NbU: total number of uploaders
+% Host: own host address
+% FileName: name of the downloading file
+% DownloadID: unique ID to identify the download
 downloadPreparation([Port|Ports],[Uploader|Uploaders],FileNumber, NbU, Host, FileName, DownloadID) ->
-    % Send request to others
+    % Send download request to another client
     Uploader ! {downloadRequest, Host, FileName, Port, FileNumber, NbU, DownloadID},
-    % Prepare to receive a socket
+    % Prepare the corresponding receiver
     spawn(client,file_name_receiver,[FileName,Port,self(),DownloadID]),
     % If there is still a piece to send we start again the loop else end
     case FileNumber of
@@ -217,11 +233,13 @@ downloadPreparation([Port|Ports],[Uploader|Uploaders],FileNumber, NbU, Host, Fil
     end.
 
 % Wait that all the pieces of the file are downloaded
+% NbU: the number of remaining downloads
 waitDownloadEnd(NbU) ->
     case NbU of
         0 -> ok;
         _Else -> 
             receive
+                % When a download ends, we reduce the number of remaining downloads
                 downloadFinished -> waitDownloadEnd(NbU-1)
             end
     end.
@@ -229,9 +247,16 @@ waitDownloadEnd(NbU) ->
 %-------------------------------------
 % TCP file sharing
 %-------------------------------------
+
+% Based on Giovanni C answer:
+% http://stackoverflow.com/questions/13818587/erlang-send-file-and-filename
+
 % Client want to receive file
 % Port: used port
+% OriginalFileName: file name of file the client want to download
+% Port: port used for transmission
 % PID: PID of the client porcess, useful to tell when download ended
+% DownloadID: unique ID to identify the download
 file_name_receiver(OriginalFileName,Port,PID,DownloadID)->
     {ok, LSock} = gen_tcp:listen(Port, [binary, {packet, 0}, {active, false}]),
     {ok, Socket} = gen_tcp:accept(LSock),
@@ -243,13 +268,14 @@ file_name_receiver(OriginalFileName,Port,PID,DownloadID)->
 
 % Loop to get the whole file
 % Socket: sending sockets
+% OriginalFileName: file name of file the client want to download
 % FileName: name of the chunk of the original file
 % Bs: received binaries
 % PID: PID of the client porcess, useful to tell when download ended
-% DownloadID needed to find the path to the download folder
+% DownloadID: unique ID to identify the download
 file_receiver_loop(Socket,OriginalFileName,FileName,Bs,PID,DownloadID)->
     case gen_tcp:recv(Socket, 0) of
-    % File received wait another file
+    % Packet received wait another packet
     {ok, B} ->
         file_receiver_loop(Socket,OriginalFileName,FileName,[Bs, B],PID,DownloadID);
     % An error occour or we have all the pieces
@@ -261,8 +287,10 @@ file_receiver_loop(Socket,OriginalFileName,FileName,Bs,PID,DownloadID)->
     end.
 
 % Save the file in the temporary folder
-% FileName: name of the file
+% OriginalFileName: file name of file the client want to download
+% FileName: name of the chunk of the original file
 % Bs: received file
+% DownloadID: unique ID to identify the download
 save_file(OriginalFileName,FileName,Bs,DownloadID) ->
     io:format("~nFilename: ~p~nDownload complete~n",[FileName]),
     FilePath = "tmp_"++OriginalFileName++DownloadID++"/",
@@ -274,7 +302,7 @@ save_file(OriginalFileName,FileName,Bs,DownloadID) ->
 % Host: IP address of target
 % FileName: name of file
 % FilePath: path to file (FileName excluded)
-% Port: used port
+% Port: port used for transmission
 send_file(Host,FileName,FilePath,Port)->
     {ok, Socket} = gen_tcp:connect(Host, Port, [binary, {packet, 0}, {active, false}]),
     FileNamePadding = string:left(FileName, 30, $ ), % Padding with white space
@@ -284,8 +312,9 @@ send_file(Host,FileName,FilePath,Port)->
 
 
 %-------------------------------------
-% Utilities
+% Interface
 %-------------------------------------
+
 % Process to give commands to the client
 % PID: pid of the main process
 interface(PID) ->
@@ -305,6 +334,8 @@ interface(PID) ->
         _Else -> io:format("Unrecognized input~n",[]), interface(PID)
     end.
 
+% Function reading of file name entered by user
+% PID: pid of the main process
 interface_download(PID) ->
     io:format("~nEnter the name of the file you want to download or b to go back.~n"),
     Input = io:fread("","~s"),
