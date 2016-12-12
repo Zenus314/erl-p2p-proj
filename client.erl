@@ -12,8 +12,7 @@
 % CLIENT
 % This program allows to share and download files with other machines in a set
 % of trusted nodes.
-% When a client is downloading a file, it is locked to that task and can't do
-% anything else.
+% A client can download and upload more files at the same time.
 %
 % Usage: client:start().
 % To use the clients, the server must be on.
@@ -22,7 +21,10 @@
 %=====================================
 
 -module(client).
--export([start/0, client/2, interface/1,file_name_receiver/4, file_receiver_loop/6, save_file/4, send_file/4, downloadPreparation/7, waitDownloadEnd/1]).
+-export([start/0, client/2,
+         downloadManager/4, downloadPreparation/7, waitDownloadEnd/1,
+         file_name_receiver/4, file_receiver_loop/6, save_file/4, send_file/4,
+         interface/1, interface_download/1, interface_remove/1]).
 
 
 %-------------------------------------
@@ -100,6 +102,15 @@ client(ServerPID, MachineIP) ->
             client(ServerPID, MachineIP);
         
         %-------------------------------------
+        % Message from downloader
+        %-------------------------------------
+        
+        % A download has finished and then we update the informations by 
+        % restarting the client
+        updateFiles ->
+            client(ServerPID, MachineIP);
+
+        %-------------------------------------
         % Messages from interface
         %-------------------------------------
        
@@ -118,44 +129,9 @@ client(ServerPID, MachineIP) ->
                             io:format("No uploader for ~p.~n", [FileName]);
                         
                          % We receive the list of Uploaders
-                        {downloadUploaders, BinUploaders} -> 
-                            % First convert from the binary form
-                            Uploaders = [erlang:binary_to_term(P) || P <- BinUploaders],
-                            % Number of uploaders
-                            NbU = length(Uploaders),
-                     
-                            % Choose NbU free ports (we use a bash script for that)
-                            String = os:cmd("./portsFinder.sh "++io_lib:format("~p",[NbU])),
-                            StringPorts = string:tokens(String,"\n"),
-                            Ports = [Q || {Q,_} <- [string:to_integer(P) || P <- StringPorts]],
-                            
-                            % Creare string to uniquely identify download
-                            % Seconds an nanosecond from the 1970
-                            [DownloadID] = string:tokens(os:cmd("date +%s%N"),"\n"),
-
-                            % Make a new temporary directory where we will save all the files' pieces
-                            os:cmd("mkdir -p tmp_"++FileName++DownloadID),
-
-                            % Start the counter in order to know the download time
-                            StartTime = now(),
-                            % Send request to other clients
-                            downloadPreparation(Ports,Uploaders,1,NbU,MachineIP,FileName,DownloadID),
-                           
-                            % Wait the end of the download of each piece
-                            waitDownloadEnd(NbU),
-
-                            % The download is ended we must merge all the pieces and save the final file to ../../p2p_shared_files/
-                            io:format("Merging file fragments...~n"),
-                            os:cmd("cat tmp_"++FileName++DownloadID++"/* > ../../p2p_shared_files/"++FileName),
-                            % Timer stopped
-                            EndTime = now(),
-                            % Calculate time difference and convert from ns to s
-                            DownloadTime = timer:now_diff(EndTime,StartTime) / 1000000,
-                            io:format("Download Time: ~ps~n",[DownloadTime]),
-                            % Delete temporary folder
-                            os:cmd("rm -r tmp_"++FileName++DownloadID),
-                            % Tell to uploaders that the download ended
-                            [U ! {thanks,FileName, DownloadID} || U <- Uploaders]
+                        {downloadUploaders, BinUploaders} ->
+                            % Launch a separate process to manage the download
+                            spawn(client,downloadManager,[FileName, BinUploaders, MachineIP, self()])
                     end
             end,
             % Reboot the interface and the client
@@ -200,6 +176,20 @@ client(ServerPID, MachineIP) ->
             end,
             spawn(client,interface,[self()]),
             client(ServerPID, MachineIP);
+
+        % Remove file entered by user
+        {removeFile, FileName} ->
+            OwnFile = lists:member(FileName, SharedFiles),
+            % Check if the machine has the file
+            case OwnFile of
+                true ->
+                    os:cmd("rm ../../p2p_shared_files/"++FileName),
+                    io:format("File ~p removed~n",[FileName]);
+                _Else ->
+                    io:format("File ~p not in this pc~n",[FileName])
+            end,
+            spawn(client,interface,[self()]),
+            client(ServerPID, MachineIP);
         
         % The client shutdown and tell to the server that he is shutting down
         stop ->
@@ -210,6 +200,55 @@ client(ServerPID, MachineIP) ->
 %-------------------------------------
 % Download Functions
 %-------------------------------------
+
+% Function to manage the download, it is launched in a separate process to allow
+% the client to do other task in parallel
+% FileName: name of the downloading file
+% BinUploaders: list containing the PIDs of uploaders in binary form
+% PID of the client that spawned this process
+downloadManager(FileName, BinUploaders, MachineIP, PID) ->
+    % First convert from the binary form
+    Uploaders = [erlang:binary_to_term(P) || P <- BinUploaders],
+    % Number of uploaders
+    NbU = length(Uploaders),
+    
+    % Choose NbU free ports (we use a bash script for that)
+    String = os:cmd("./portsFinder.sh "++io_lib:format("~p",[NbU])),
+    StringPorts = string:tokens(String,"\n"),
+    Ports = [Q || {Q,_} <- [string:to_integer(P) || P <- StringPorts]],
+         
+    % Creare string to uniquely identify download
+    % Seconds an nanosecond from the 1970
+    [DownloadID] = string:tokens(os:cmd("date +%s%N"),"\n"),
+
+    %Make a new temporary directory where we will save all the files' pieces
+    os:cmd("mkdir -p tmp_"++FileName++DownloadID),
+
+    io:format("Downloading ~s...~n",[FileName]),
+    % Start the counter in order to know the download time
+    StartTime = now(),
+    % Send request to other clients
+    downloadPreparation(Ports,Uploaders,1,NbU,MachineIP,FileName,DownloadID),
+                           
+    % Wait the end of the download of each piece
+    waitDownloadEnd(NbU),
+
+    % The download is ended we must merge all the pieces and save the final file to ../../p2p_shared_files/
+    io:format("Download ~s complete",[FileName]),
+    io:format("Merging ~s fragments...~n",[FileName]),
+    os:cmd("cat tmp_"++FileName++DownloadID++"/* > ../../p2p_shared_files/"++FileName),
+    % Timer stopped
+    EndTime = now(),
+    % Calculate time difference and convert from ns to s
+    DownloadTime = timer:now_diff(EndTime,StartTime) / 1000000,
+    io:format("Merging of ~s complete~n",[FileName]),
+    io:format("Total time: ~ps~n",[DownloadTime]),
+    % Delete temporary folder
+    os:cmd("rm -r tmp_"++FileName++DownloadID),
+    % Tell to uploaders that the download ended
+    [U ! {thanks,FileName, DownloadID} || U <- Uploaders],
+    % Tell client to update list of owned files
+    PID ! updateFiles.
 
 % Send to each Uploaders the request for downloading a specific part of file
 % Port: the next port used for transmission
@@ -263,7 +302,7 @@ file_name_receiver(OriginalFileName,Port,PID,DownloadID)->
     {ok,FileNameBinaryPadding}=gen_tcp:recv(Socket,30),
     FileNamePadding=erlang:binary_to_list(FileNameBinaryPadding),
     FileName = string:strip(FileNamePadding,both,$ ),
-    io:format("~nReceiving file~n"),
+    % io:format("~nReceiving file~n"),
     file_receiver_loop(Socket,OriginalFileName,FileName,[],PID,DownloadID).
 
 % Loop to get the whole file
@@ -292,7 +331,7 @@ file_receiver_loop(Socket,OriginalFileName,FileName,Bs,PID,DownloadID)->
 % Bs: received file
 % DownloadID: unique ID to identify the download
 save_file(OriginalFileName,FileName,Bs,DownloadID) ->
-    io:format("~nFilename: ~p~nDownload complete~n",[FileName]),
+    % io:format("~nFilename: ~p~nDownload complete~n",[FileName]),
     FilePath = "tmp_"++OriginalFileName++DownloadID++"/",
     {ok, Fd} = file:open(FilePath++FileName, write),
     file:write(Fd, Bs),
@@ -323,6 +362,7 @@ interface(PID) ->
     io:format("a: show ip address~n"),    
     io:format("f: show available files~n"),
     io:format("u: show upload files~n"),
+    io:format("r: remove file~n"),
     io:format("q: close program~n"),
     Input = io:fread("","~s"),
     case Input of
@@ -330,11 +370,12 @@ interface(PID) ->
         {ok,["a"]} -> PID ! showIP;
         {ok,["f"]} -> PID ! showFiles;
         {ok,["u"]} -> PID ! showUpload;
+        {ok,["r"]} -> interface_remove(PID);
         {ok,["q"]} -> PID ! stop;
         _Else -> io:format("Unrecognized input~n",[]), interface(PID)
     end.
 
-% Function reading of file name entered by user
+% Function reading name of file name entered by user to download it
 % PID: pid of the main process
 interface_download(PID) ->
     io:format("~nEnter the name of the file you want to download or b to go back.~n"),
@@ -344,5 +385,18 @@ interface_download(PID) ->
         {ok, [FileName]} -> PID ! {downloadStart, FileName};
         _Else -> io:format("Unrecognized input~n",[]), interface_download(PID)
     end.
+
+% Function reading name of file name entered by user to remove it
+% PID: pid of the main process
+interface_remove(PID) ->
+    io:format("~nEnter the name of the file you want to remove or b to go back.~n"),
+    Input = io:fread("","~s"),
+    case Input of
+        {ok, ["b"]} -> interface(PID);
+        {ok, [FileName]} -> PID ! {removeFile, FileName};
+        _Else -> io:format("Unrecognized input~n",[]), interface_remove(PID)
+    end.
+
+
 
 

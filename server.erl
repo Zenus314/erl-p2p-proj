@@ -103,17 +103,12 @@ server(List) ->
             case Uploaders of
                 [] ->
                     % If the list is empty, the client receive the atom nothing
-                    PID ! {downloadUploaders, nothing},
-                    server(List);
+                    PID ! {downloadUploaders, nothing};
                 _Else ->
                     % Sends the list of uploaders
-                    PID ! {downloadUploaders, Uploaders},
-                    % Since a client which is downloading can't do nothing else,
-                    % we remove its file availability from the list
-                    ListMinusPID = [{P,Name} || {P,Name} <- List, P /= PID],
-                    List2 = ListMinusPID++[{PID,nofiles}],
-                    server(List2)
-            end;
+                    PID ! {downloadUploaders, Uploaders}
+            end,
+            server(List);
 
         %-------------------------------------
         % Messages from interface
@@ -186,3 +181,6 @@ printPID(PID) ->
 printIP(Node) ->
     {ok,[{IP,_,_}|_]} = rpc:call(Node,inet,getif,[]), % get server IP
     file:write_file("useful_files/machineIP", io_lib:format("~p.", [erlang:term_to_binary(IP)])).
+
+
+
