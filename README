@@ -1,0 +1,132 @@
+%=====================================
+% Matteo Badaracco
+% Zeno Bardelli
+%-------------------------------------
+% Concurrent and Distributed Computing
+% SA 2016 Project
+% Université de Fribourg
+%-------------------------------------
+% Peer-to-peer
+%=====================================
+
+
+======================================
+ 1. Description
+======================================
+
+Ce programme permet de transmettre des fichiers entre deux ou plusieurs machines
+disponibles pour le contrôle à distance au CDC-Lab de l'université de Fribourg.
+Le seul système d'exploitation supporté est Linux, donc les machines utilisables
+sont des diufpc80 à diufpc87.
+
+Brève description des fichiers contenus dans le répertoire p2p:
+	- client.erl:          code source pour le programme client;
+	- server.erl:          code source pour le programme server;
+	- portsFinder.sh:      script script utilisé par le programme client;
+	- p2p_server.sh:       script pour lancer le programme server;
+	- p2p_client.sh:       script pour lancer le programme client;
+	- setupEnvironment.sh: script pour préparer un scénario adapte pour faire de
+                           test;
+	- resetEnvironment.sh: script pour rétablir la situation générée par
+                           setupEnvironnement.sh après les tests;
+	- README:              manual d'instructions.
+
+
+======================================
+ 2. Configuration
+======================================
+
+On suppose d'utiliser une machine Linux capable de se connecter au CDC-Lab de
+l'université de Fribourg. D'abord on sauve le répertoire p2p à la position
+~/mpe/erl/teda/apps/p2p, donc on ouvre le terminal en cette position.
+On rend exécutables les scripts.
+
+$ chmod +x *.sh
+
+Ensuite on déplace les scripts sauf $portsFinder.sh$ dans la bonne position.
+
+$ mv p2p_*.sh ../../scripts
+$ mv *Environment.sh ../../scripts
+
+À ce point il faut configurer l'environnement dans la manière indiquée par le
+document "Erlang teDa Memento" fournit au cours, jusqu'au chapitre
+"Run application" non inclus.
+
+-----------------------------------------------
+Configurer manuellement les fichiers en partage
+-----------------------------------------------
+En chaque machine qu'on souhaite avoir un ou plusieurs fichiers à partager, il
+faut créer le répertoire ~/mpe/erl/teda/p2p_shared_files et y mettre les
+fichiers.
+Il n'est pas nécessaire de définir un tel répertoire dans les machines sans 
+fichiers, car le programme va créer ça automatiquement.
+
+-----------------------------------
+Configurer avec setupEnvironment.sh
+-----------------------------------
+Avant d'utiliser le script, il faut créer le répertoire
+~/mpe/erl/teda/p2p_shared_files dans la machine utilisée et y mettre quatre
+fichiers appelés lorem.txt, sam.mp4, games.mp4, isengard.mp4.
+On ne va pas fournir les fichiers qu'on a utilisés par notre test pour une
+question d'espaces, mais on suggère d'utiliser des fichiers de dimensions
+différentes.
+Maintenant il suffit de lancer le script comme suit:
+
+$ ../../scripts/setupEnvironment.sh <diufpc username>
+
+Le scénario généré est décrit par la tabelle suivante.
+
++---------+------------------------------------------------+
+|         |                   Files Name                   |
++ PC Name +------------------------------------------------+
+|         | lorem.txt | sam.mp4 | games.mp4 | isengard.mp4 |
++---------+-----------+---------+-----------+--------------+
+|   pc80  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc81  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc82  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc83  |    Yes    |   Yes   |    Yes    |      Yes     |
++---------+-----------+---------+-----------+--------------+
+|   pc84  |    Yes    |   Yes   |     No    |      No      |
++---------+-----------+---------+-----------+--------------+
+|   pc85  |    Yes    |   Yes   |     No    |      No      |
++---------+-----------+---------+-----------+--------------+
+|   pc86  |     No    |    No   |     No    |      No      |
++---------+-----------+---------+-----------+--------------+
+
+Si aucun fichier est effacé, pour retourner à la situation originale il suffit
+de lancer le script resetEnvironment.sh.
+
+$ ../../scripts/resetEnvironment.sh <diufpc username>
+
+
+======================================
+ 3. Exécution du programme
+======================================
+
+Le concept de base est qu'on va utiliser un different terminal pour chaque
+serveur et client qu'on va lancer. Le parcours doit être pour tous
+~/mpe/erl/teda/apps/p2p. Il est impératif de lancer le serveur par premier. Il
+n'est pas possible d'utiliser plus qu'un serveur. Pour faire ça, il suffit de
+taper dans un terminal la commande
+
+$ ../../scripts/p2p_server.sh <number> <diufpc username>
+
+où <number> est un nombre compris entre 0 et 7; 0 signifie qu'on lance le
+serveur sur la machine diufpc80, 1 sur diufpc81, etc.
+Une fois que le serveur est démarré, c'est possible de lancer les clients avec
+les autres terminals. Chaque machine ne doit pas exécuter plus qu'un client à la
+fois. Chaque client connecté va rendre disponibles dans le réseau les fichiers
+qui sa machine a dans le répertoire ~\mytilde/mpe/erl/teda/p2p\_shared\_files.
+La commande est:
+
+$ ../../scripts/p2p_client.sh <number> <diufpc username>
+
+où <number> a la même signification que pour le script précédent. Si le serveur
+est fermé, il faut fermer aussi tous les clients. Les deux programmes vont
+afficher en continuation les actions possibles à effectuer, donc ne sont pas
+nécessaires d'expliquer en cette enceinte comment l'utiliser.
+
+

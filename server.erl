@@ -173,6 +173,7 @@ interface(PID) ->
 % Useful for communicating with server, since they need to know the PID.
 % PID: PID of server
 printPID(PID) ->
+    os:cmd("mkdir -p useful_files"),
     file:write_file("useful_files/serverPID", io_lib:format("~p.", [erlang:term_to_binary(PID)])).
 
 % Print IP of a machine on a file.
@@ -180,6 +181,7 @@ printPID(PID) ->
 % Node: node of the machine itself
 printIP(Node) ->
     {ok,[{IP,_,_}|_]} = rpc:call(Node,inet,getif,[]), % get server IP
+    os:cmd("mkdir -p useful_files"),
     file:write_file("useful_files/machineIP", io_lib:format("~p.", [erlang:term_to_binary(IP)])).
 
 
